@@ -5,12 +5,20 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 from dotenv import load_dotenv
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
 
 # Initialize FastAPI
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to your frontend URL for better security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configuration
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
@@ -32,7 +40,7 @@ llm = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
-    max_new_tokens=256,  # Reduced for more focused responses
+    max_new_tokens=512,  # Reduced for more focused responses
     do_sample=True,
     temperature=0.1,     # Reduced temperature for more focused outputs
     top_p=0.95,
@@ -69,7 +77,7 @@ def fact_check_with_tavily(query: str):
 
 def format_analysis_prompt(query: str, search_results: str) -> str:
     return f"""<|im_start|>system
-You are a helpful fact-checking assistant. Analyze the search results and provide a clear conclusion about the claim.
+You are a helpful fact-checking assistant. Analyze the search results and provide a clear conclusion about the claim. Also provide how you arrived at your conclusion.
 <|im_end|>
 <|im_start|>user
 Claim to check: {query}
