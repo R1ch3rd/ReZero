@@ -6,7 +6,7 @@ import ContentCard from '../components/ContentCard';
 const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
-      <Header />
+
       <div className="container mx-auto px-6 py-12">
         <ContentCard>
           <h2 className="text-2xl font-bold">Dashboard</h2>
