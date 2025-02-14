@@ -5,8 +5,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 from dotenv import load_dotenv
 import os
+import re
 from fastapi.middleware.cors import CORSMiddleware
-
 # Load environment variables
 load_dotenv()
 
@@ -35,14 +35,14 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-# Create pipeline with specific settings for better responses
+# Create pipeline with optimized settings
 llm = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
-    max_new_tokens=512,  # Reduced for more focused responses
+    max_new_tokens=512,
     do_sample=True,
-    temperature=0.1,     # Reduced temperature for more focused outputs
+    temperature=0.1,  # Very low temperature for more focused outputs
     top_p=0.95,
     num_return_sequences=1,
     return_full_text=False,
@@ -64,7 +64,7 @@ def fact_check_with_tavily(query: str):
         for i, result in enumerate(response.get('results', [])[:3]):
             snippet = result.get('content', result.get('snippet', 'No content available'))
             url = result.get('url', 'No URL available')
-            snippets.append(f"Source {i+1} ({url}): {snippet}")
+            snippets.append(f"Source {i+1}: {snippet}")
         
         if not snippets:
             return "No relevant information found."
@@ -75,20 +75,35 @@ def fact_check_with_tavily(query: str):
         print(f"Tavily search error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
-def format_analysis_prompt(query: str, search_results: str) -> str:
-    return f"""<|im_start|>system
-You are a helpful fact-checking assistant. Analyze the search results and provide a clear conclusion about the claim. Also provide how you arrived at your conclusion.
-<|im_end|>
-<|im_start|>user
-Claim to check: {query}
+def clean_response(response: str) -> str:
+    """Clean and format the model's response."""
+    # Remove any instruction-like text
+    response = re.sub(r'Analysis:|Conclusion:|Explain your reasoning.*|State whether.*', '', response)
+    
+    # Remove emojis and special characters
+    response = re.sub(r'[✅❌⚠️]', '', response)
+    
+    # Remove extra whitespace and newlines
+    response = ' '.join(response.split())
+    
+    return response.strip()
 
-Search Results:
+def format_analysis_prompt(query: str, search_results: str) -> str:
+    return f"""Review this claim and the evidence carefully:
+
+CLAIM: {query}
+
+EVIDENCE:
 {search_results}
 
-Provide a clear fact-check response. State whether the claim is true, false, or if there's insufficient information. Explain your reasoning using the sources.
-<|im_end|>
-<|im_start|>assistant
-Based on the search results, here is my analysis:"""
+Provide a short analysis focusing on:
+1. Whether the claim is supported by the evidence
+2. What the sources actually say
+3. Your conclusion about whether the claim is true or false
+
+Keep your response focused and clear. Don't repeat the instructions.
+
+Your analysis:"""
 
 def fact_check_agent(query: str):
     try:
@@ -101,17 +116,26 @@ def fact_check_agent(query: str):
         # Get model's analysis
         response = llm(analysis_prompt)[0]['generated_text']
         
-        # If response is empty, try a simpler prompt
-        if not response.strip():
-            backup_prompt = f"Is this claim true or false? {query}\n\nBased on these sources:\n{search_results}\n\nConclusion:"
-            response = llm(backup_prompt)[0]['generated_text']
+        # Clean the response
+        cleaned_response = clean_response(response)
         
-        # If still empty, return error message
-        if not response.strip():
-            response = "Unable to generate analysis. Please try rephrasing your query."
+        # If response is too short or empty, try a simpler prompt
+        if len(cleaned_response) < 50:
+            backup_prompt = f"""Based on these sources:
+
+{search_results}
+
+Is the claim "{query}" true or false? Explain why in 2-3 sentences:"""
+            
+            response = llm(backup_prompt)[0]['generated_text']
+            cleaned_response = clean_response(response)
+        
+        # If still too short, return error
+        if len(cleaned_response) < 20:
+            cleaned_response = "Unable to generate a clear analysis. The sources don't provide enough relevant information to make a determination."
         
         return {
-            "result": response.strip(),
+            "result": cleaned_response,
             "sources": search_results
         }
         
@@ -129,14 +153,6 @@ async def analyze_content(data: InputData):
             raise HTTPException(status_code=400, detail="Content cannot be empty")
             
         result = fact_check_agent(data.content)
-        
-        # Verify we have a response
-        if not result["result"]:
-            raise HTTPException(
-                status_code=500,
-                detail="Model generated empty response. Please try again."
-            )
-            
         return result
         
     except HTTPException as he:
