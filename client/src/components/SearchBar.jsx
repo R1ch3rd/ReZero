@@ -1,26 +1,32 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const SearchBar = ({ onSearch }) => {
-  const [query, setQuery] = React.useState('');
+  const [query, setQuery] = useState('');
 
-  const handleSearch = (e) => {
-    e.preventDefault();
+  const handleChange = (e) => {
+    setQuery(e.target.value);
+  };
+
+  const handleSearch = () => {
     onSearch(query);
   };
 
   return (
-    <form onSubmit={handleSearch} className="flex justify-center items-center p-4">
+    <div className="flex items-center bg-gray-700 p-2 rounded-xl w-full max-w-lg mx-auto">
       <input
         type="text"
+        className="bg-transparent text-white placeholder-gray-400 w-full p-2 rounded-l-lg"
+        placeholder="Search past analyses"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="w-1/2 p-2 border border-gray-300 rounded"
-        placeholder="Search flagged content"
+        onChange={handleChange}
       />
-      <button type="submit" className="ml-2 bg-blue-600 text-white px-6 py-2 rounded">
+      <button
+        onClick={handleSearch}
+        className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-r-lg"
+      >
         Search
       </button>
-    </form>
+    </div>
   );
 };
 

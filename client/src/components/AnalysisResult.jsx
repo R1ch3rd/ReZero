@@ -1,14 +1,10 @@
 import React from 'react';
 
-const AnalysisResult = ({ result }) => {
+const AnalysisResult = ({ flagged, message }) => {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold">Analysis Results</h2>
-      <p className="mt-2">Text Analysis: {result.text}</p>
-      <p className={`mt-2 ${result.isFlagged ? 'text-red-600' : 'text-green-600'}`}>
-        {result.isFlagged ? 'Flagged as Misinformation' : 'Content is Authentic'}
-      </p>
-      {result.details && <p className="text-sm text-gray-500 mt-1">{result.details}</p>}
+    <div className={`bg-${flagged ? 'red' : 'green'}-500 text-white p-4 rounded-xl shadow-lg`}>
+      <h3 className="text-2xl font-semibold">{flagged ? '⚠️ Misinformation Detected' : '✅ Content Valid'}</h3>
+      <p className="mt-2">{message}</p>
     </div>
   );
 };

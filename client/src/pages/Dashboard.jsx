@@ -1,17 +1,19 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import ContentCard from '../components/ContentCard';
 
 const Dashboard = () => {
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4">User Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold">Recent Analyses</h3>
-          <p className="mt-2">View recent content analyses and feedback.</p>
-          <Link to="/analysis" className="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded">Go to Analysis</Link>
-        </div>
+    <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
+
+      <div className="container mx-auto px-6 py-12">
+        <ContentCard>
+          <h2 className="text-2xl font-bold">Dashboard</h2>
+          <p className="mt-2">View your past analysis results and flagged misinformation reports.</p>
+        </ContentCard>
       </div>
+      <Footer />
     </div>
   );
 };
