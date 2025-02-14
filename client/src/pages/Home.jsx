@@ -1,12 +1,13 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import Header from '../components/Header';
 
 const Home = () => {
   return (
-    <div className="text-center">
-      <h1 className="text-4xl font-bold mb-4">Welcome to Re:Zero</h1>
-      <p className="mb-4">Detect and flag misinformation in real-time across text, images, and videos.</p>
-      <Link to="/analysis" className="bg-blue-600 text-white px-6 py-2 rounded">Start Analyzing Content</Link>
+    <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
+      <Header />
+      <div className="container mx-auto p-6">
+        <h1 className="text-3xl font-bold">Welcome to the Home Page</h1>
+      </div>
     </div>
   );
 };

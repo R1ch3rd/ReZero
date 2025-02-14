@@ -1,51 +1,38 @@
 import React, { useState } from 'react';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
 import ProgressIndicator from '../components/ProgressIndicator';
-import AnalysisResult from '../components/AnalysisResult';
 import ContentCard from '../components/ContentCard';
 
 const Analysis = () => {
-  const [content, setContent] = useState('');
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState(null);
 
-  const handleContentSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    // Simulate API call
+  const handleFileUpload = (e) => {
+    setFile(e.target.files[0]);
+    setLoading(true);
     setTimeout(() => {
-      setAnalysisResult({
-        text: content,
-        isFlagged: Math.random() > 0.5,
-        details: 'Fake news detected based on fact-checking algorithm.',
-      });
-      setIsLoading(false);
+      setLoading(false);
     }, 2000);
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4">Submit Content for Analysis</h2>
-      <form onSubmit={handleContentSubmit}>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded mb-4"
-          placeholder="Enter text to analyze..."
-        />
-        <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">Analyze Content</button>
-      </form>
-
-      {isLoading && <ProgressIndicator        />}
-      <div className="mt-6">
-        {analysisResult && <AnalysisResult result={analysisResult} />}
-        <div className="mt-6">
-          <ContentCard content={{ type: 'Article', text: 'This is an example content.' }} analysisResult={analysisResult || {}} />
-        </div>
+    <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
+      <Header />
+      <div className="container mx-auto px-6 py-12">
+        <ContentCard>
+          <h2 className="text-2xl font-bold mb-4">Upload Content for Misinformation Analysis</h2>
+          <input
+            type="file"
+            onChange={handleFileUpload}
+            className="bg-gray-700 text-white p-2 rounded-md"
+          />
+          {loading ? <ProgressIndicator /> : file && <p className="mt-4">File: {file.name}</p>}
+        </ContentCard>
       </div>
+      <Footer />
     </div>
   );
 };
 
 export default Analysis;
-
