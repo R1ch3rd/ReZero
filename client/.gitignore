@@ -7,7 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modulesnpm install -D tailwindcss postcss autoprefixer
+node_modules
 dist
 dist-ssr
 *.local
