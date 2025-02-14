@@ -38,6 +38,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
+      <Header />
       <div className="container mx-auto px-6 py-12">
         <ContentCard className="text-center">
           <h1 className="text-3xl font-bold mb-4">Welcome to Re:Zero</h1>
