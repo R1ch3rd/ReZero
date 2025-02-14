@@ -10,8 +10,7 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white flex flex-col items-center justify-center px-4">
-      
+    <div className="w-full min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white flex flex-col items-center justify-center px-4">
       {/* Profile Title Card */}
       <ProfileTitleCard title="User Profile" subtitle="Manage your account details" />
 
