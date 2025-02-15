@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from tavily import TavilyClient
 import requests
@@ -9,6 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import pdfplumber
 import io
+import torch
+from transformers import (
+    AutoTokenizer, AutoModelForSequenceClassification,
+    ViTImageProcessor, ViTForImageClassification
+)
+from PIL import Image
+import base64
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +47,106 @@ tavily_client = TavilyClient(TAVILY_API_KEY)
 
 class InputData(BaseModel):
     content: str
+
+class AIDetector:
+    def __init__(self):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Using device: {self.device}")
+
+        # Load text detection model
+        logger.info("Loading text detection model...")
+        self.text_model_name = "roberta-large-openai-detector"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.text_model_name)
+        self.text_model = AutoModelForSequenceClassification.from_pretrained(
+            self.text_model_name, ignore_mismatched_sizes=True
+        ).to(self.device)
+        self.text_model.eval()
+
+        # Load image detection model
+        logger.info("Loading image detection model...")
+        self.image_model_name = "google/vit-base-patch16-224"
+        self.image_processor = ViTImageProcessor.from_pretrained(self.image_model_name)
+        self.image_model = ViTForImageClassification.from_pretrained(
+            self.image_model_name, num_labels=2, ignore_mismatched_sizes=True
+        ).to(self.device)
+        self.image_model.eval()
+
+        self.image_labels = {0: "✅ Real", 1: "🚩 AI-Generated"}
+        logger.info("AI Detection models loaded successfully!")
+
+    def detect_text(self, text, threshold=0.40):
+        """Improved text detection with XAI outputs."""
+        try:
+            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(self.device)
+            with torch.no_grad():
+                outputs = self.text_model(**inputs)
+                probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
+                ai_probability = probabilities[0][1].item()
+
+            label = "🚩 AI-Generated" if ai_probability > threshold else "✅ Real"
+            confidence = ai_probability * 100
+            return label, confidence, probabilities.tolist()
+
+        except Exception as e:
+            logger.error(f"Error in text detection: {e}")
+            return "Error processing text", 0.0, []
+
+    def detect_image(self, image_data, threshold=0.40):
+        """Improved image detection with XAI outputs and data validation."""
+        try:
+            # Process the image data (can be a file path or bytes)
+            if isinstance(image_data, str):
+                # Assume it's a file path
+                if not os.path.exists(image_data):
+                    logger.error(f"❌ Error: Image file '{image_data}' not found!")
+                    return "Error: Image not found", 0.0, []
+                image = Image.open(image_data).convert('RGB')
+            else:
+                # Assume it's bytes data
+                image = Image.open(io.BytesIO(image_data)).convert('RGB')
+
+            inputs = self.image_processor(images=image, return_tensors="pt").to(self.device)
+
+            with torch.no_grad():
+                outputs = self.image_model(**inputs)
+                logits = outputs.logits
+                probabilities = torch.nn.functional.softmax(logits, dim=-1)
+                ai_probability = probabilities[0][1].item()
+
+            label = "🚩 AI-Generated" if ai_probability > threshold else "✅ Real"
+            confidence = ai_probability * 100
+            return label, confidence, probabilities.tolist()
+
+        except Exception as e:
+            logger.error(f"❌ Error in image detection: {e}")
+            return "Error processing image", 0.0, []
+
+    def analyze_content(self, image_data=None, text=None):
+        """Analyze both image and text with improved accuracy and XAI outputs."""
+        results = {}
+
+        if image_data:
+            logger.info("🔍 Analyzing image...")
+            image_result, image_conf, image_probs = self.detect_image(image_data)
+            results["image"] = {
+                "result": image_result,
+                "confidence": f"{image_conf:.2f}%",
+                "probabilities": image_probs
+            }
+
+        if text:
+            logger.info("🔍 Analyzing text...")
+            text_result, text_conf, text_probs = self.detect_text(text)
+            results["text"] = {
+                "result": text_result,
+                "confidence": f"{text_conf:.2f}%",
+                "probabilities": text_probs
+            }
+
+        return results
+
+# Initialize the AI Detector
+ai_detector = AIDetector()
 
 def prepare_query_for_tavily(text: str) -> str:
     """Prepare text for Tavily search query."""
@@ -228,6 +335,37 @@ async def analyze_text(data: InputData):
     if not data.content.strip():
         raise HTTPException(status_code=400, detail="Empty content provided")
     return fact_check_agent(data.content)
+
+# New endpoint for AI detection
+@app.post("/detect-ai")
+async def detect_ai(
+    text: str = Form(None),
+    image: UploadFile = File(None)
+):
+    try:
+        image_data = None
+        if image:
+            image_data = await image.read()
+        
+        if not text and not image_data:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one of text or image must be provided"
+            )
+        
+        results = ai_detector.analyze_content(
+            image_data=image_data,
+            text=text
+        )
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"AI detection error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI detection failed: {str(e)}"
+        )
 
 @app.get("/health")
 async def health_check():
