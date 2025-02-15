@@ -1,59 +1,67 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { collection, query, orderBy, onSnapshot, addDoc } from "firebase/firestore";
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import { collection, query, orderBy, getDocs, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
 
 const Dashboard = () => {
-  const [actions, setActions] = useState([]);
+  const [queries, setQueries] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      const q = query(collection(db, "users", user.uid, "actions"), orderBy("timestamp", "desc"));
-      const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const actionsArray = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setActions(actionsArray);
-      });
-      return () => unsubscribe();
-    }
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const userActionsRef = collection(db, "users", user.uid, "actions");
+        const q = query(userActionsRef, orderBy("timestamp", "desc"));
+
+        // Real-time updates
+        const unsubscribeSnapshot = onSnapshot(q, (querySnapshot) => {
+          const userQueries = querySnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setQueries(userQueries);
+          setLoading(false);
+        });
+
+        return () => unsubscribeSnapshot();
+      } else {
+        setQueries([]);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
   }, []);
 
-  const saveUserAction = async (input, output) => {
-    const user = auth.currentUser;
-    if (user) {
-      const userActionsRef = collection(db, "users", user.uid, "actions");
-      await addDoc(userActionsRef, { 
-        input: input, 
-        output: output, 
-        timestamp: new Date() 
-      });
-    } else {
-      console.log("No user logged in");
-    }
-  };
-
   return (
-    <div className="w-full min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white flex flex-col">
+    <div className="w-full min-h-screen bg-gray-900 text-white flex flex-col">
       <Header />
-      <div className="flex-grow container mx-auto px-6 py-12">
-        <h2 className="text-3xl font-bold mb-6">Dashboard</h2>
-        <p className="mb-4 text-gray-300">Here are your recent actions and analyses:</p>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {actions.length > 0 ? (
-            actions.map((action) => (
-              <div key={action.id} className="bg-gray-800 p-6 rounded-lg shadow-lg hover:shadow-2xl transform hover:scale-105 transition-transform cursor-pointer">
-                <h3 className="text-xl font-semibold mb-2">Input:</h3>
-                <p className="text-gray-300 mb-4">{action.input}</p>
-                <h3 className="text-xl font-semibold mb-2">Output:</h3>
-                <p className="text-gray-300">{action.output}</p>
-                <p className="text-sm text-gray-500 mt-4">Timestamp: {new Date(action.timestamp.toDate()).toLocaleString()}</p>
+      <div className="max-w-4xl mx-auto p-6">
+        <h2 className="text-2xl font-bold mb-4">Your Past Queries</h2>
+
+        {loading ? (
+          <p>Loading...</p>
+        ) : queries.length > 0 ? (
+          <div className="space-y-4">
+            {queries.map((query) => (
+              <div key={query.id} className="p-4 bg-gray-800 rounded-lg">
+                <p className="text-sm text-gray-400">
+                  <strong>Input:</strong> {query.input}
+                </p>
+                <p className="mt-2 text-green-400">
+                  <strong>Analysis:</strong> {query.output}
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  {query.timestamp ? new Date(query.timestamp.seconds * 1000).toLocaleString() : "No timestamp"}
+                </p>
               </div>
-            ))
-          ) : (
-            <p className="text-gray-400">No actions recorded yet.</p>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p>No queries found.</p>
+        )}
       </div>
       <Footer />
     </div>

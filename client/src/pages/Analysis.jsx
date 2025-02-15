@@ -1,9 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // For redirecting unauthenticated users
+import { auth, db } from "../firebase";
+import { collection, addDoc } from "firebase/firestore";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import ProgressIndicator from "../components/ProgressIndicator";
 import ContentCard from "../components/ContentCard";
 import axios from "axios";
+import { serverTimestamp } from "firebase/firestore";
+
 
 const BACKEND_URL = "http://localhost:8000";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -15,6 +20,9 @@ const Analysis = () => {
   const [message, setMessage] = useState("");
   const [analysisResult, setAnalysisResult] = useState(null);
   const [sources, setSources] = useState([]);
+  const navigate = useNavigate(); // Hook for navigation
+
+  
 
   const handleFileUpload = (e) => {
     const selectedFile = e.target.files[0];
@@ -23,7 +31,7 @@ const Analysis = () => {
         setMessage("File size exceeds 10MB limit");
         return;
       }
-      if (selectedFile.type !== 'application/pdf') {
+      if (selectedFile.type !== "application/pdf") {
         setMessage("Please upload a PDF file");
         return;
       }
@@ -35,6 +43,20 @@ const Analysis = () => {
   const handleTextChange = (e) => {
     setTextInput(e.target.value);
     setMessage("");
+  };
+
+  const saveUserAction = async (input, output) => {
+    const user = auth.currentUser;
+    if (user) {
+      const userActionsRef = collection(db, "users", user.uid, "actions");
+      await addDoc(userActionsRef, {
+        input: input,
+        output: output,
+        timestamp: serverTimestamp(), // Use Firestore server timestamp
+      });
+    } else {
+      console.log("No user logged in");
+    }
   };
 
   const handleSubmit = async () => {
@@ -54,16 +76,16 @@ const Analysis = () => {
       if (file) {
         const formData = new FormData();
         formData.append("file", file);
-        
+
         try {
           const fileResponse = await axios.post(`${BACKEND_URL}/upload-pdf`, formData, {
-            headers: { 
-              "Content-Type": "multipart/form-data"
+            headers: {
+              "Content-Type": "multipart/form-data",
             },
             maxContentLength: MAX_FILE_SIZE,
-            maxBodyLength: MAX_FILE_SIZE
+            maxBodyLength: MAX_FILE_SIZE,
           });
-          
+
           if (!fileResponse.data.text) {
             throw new Error("No text content extracted from PDF");
           }
@@ -82,20 +104,22 @@ const Analysis = () => {
         return;
       }
 
-      const response = await axios.post(`${BACKEND_URL}/analyze`, { 
-        content: content
+      const response = await axios.post(`${BACKEND_URL}/analyze`, {
+        content: content,
       });
 
       if (response.data) {
         setAnalysisResult(response.data.result || "No result returned.");
         const sourcesData = response.data.sources;
-        setSources(typeof sourcesData === 'string' ? sourcesData.split('\n') : sourcesData || []);
-      }
+        setSources(typeof sourcesData === "string" ? sourcesData.split("\n") : sourcesData || []);
 
+        // Save user action to Firestore
+        await saveUserAction(content, response.data.result);
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.detail || error.message;
       setMessage(`Error during analysis: ${errorMessage}`);
-      console.error('Full error:', error);
+      console.error("Full error:", error);
     } finally {
       setLoading(false);
     }
@@ -107,9 +131,8 @@ const Analysis = () => {
     setMessage("");
     setAnalysisResult(null);
     setSources([]);
-    // Reset file input
     const fileInput = document.querySelector('input[type="file"]');
-    if (fileInput) fileInput.value = '';
+    if (fileInput) fileInput.value = "";
   };
 
   return (
@@ -118,20 +141,20 @@ const Analysis = () => {
       <div className="flex-grow max-w-2xl mx-auto px-6 py-12">
         <ContentCard>
           <h2 className="text-2xl font-bold mb-4">Upload Content for Misinformation Analysis</h2>
-          
+
           <textarea
             className="w-full h-32 p-3 bg-gray-800 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Enter text here for analysis..."
             value={textInput}
             onChange={handleTextChange}
           />
-          
+
           <div className="mt-4">
-            <input 
-              type="file" 
-              accept=".pdf" 
-              onChange={handleFileUpload} 
-              className="bg-gray-700 text-white p-2 rounded-md cursor-pointer" 
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={handleFileUpload}
+              className="bg-gray-700 text-white p-2 rounded-md cursor-pointer"
             />
             <p className="text-sm text-gray-400 mt-1">Maximum file size: 10MB</p>
           </div>
@@ -157,18 +180,18 @@ const Analysis = () => {
           )}
 
           <div className="flex justify-end gap-4 mt-4">
-            <button 
+            <button
               onClick={clearForm}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200"
             >
               Clear
             </button>
-            <button 
-              onClick={handleSubmit} 
+            <button
+              onClick={handleSubmit}
               disabled={loading}
-              className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              {loading ? 'Processing...' : 'Submit'}
+              {loading ? "Processing..." : "Submit"}
             </button>
           </div>
         </ContentCard>
