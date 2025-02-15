@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from './pages/Home';
 import Analysis from './pages/Analysis';
 import Dashboard from './pages/Dashboard';
-import Profile from './pages/Profile';
+import AuthPage from './pages/AuthPage'; // Replacing Profile with AuthPage
 
 const App = () => {
   const [results, setResults] = useState(null);
@@ -15,7 +15,7 @@ const App = () => {
           <Route path="/" element={<Home />} />
           <Route path="/analysis" element={<Analysis setResults={setResults} />} />
           <Route path="/dashboard" element={<Dashboard results={results} />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/auth" element={<AuthPage />} /> {/* Updated route */}
         </Routes>
       </main>
     </Router>
