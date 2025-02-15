@@ -10,7 +10,7 @@ const App = () => {
 
   return (
     <Router>
-      <main className="p-4">
+      <main>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/analysis" element={<Analysis setResults={setResults} />} />
