@@ -7,8 +7,8 @@ const Header = () => {
         <a href="/" className="text-xl font-bold text-white">Re:Zero</a>
         <div className="space-x-4">
           <a href="/dashboard" className="text-white hover:text-gray-200">Dashboard</a>
-          <a href="/Analysis" className="text-white hover:text-gray-200">Analysis</a>
-          <a href="/profile" className="text-white hover:text-gray-200">Profile</a>
+          <a href="/analysis" className="text-white hover:text-gray-200">Analysis</a>
+          <a href="/auth" className="text-white hover:text-gray-200">Auth</a>
         </div>
       </div>
     </header>
