@@ -1,4 +1,4 @@
-# AI Misinformation Detection API
+# AI Content and Misinformation Detection
 
 ## Overview
 
