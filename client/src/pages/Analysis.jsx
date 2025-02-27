@@ -16,12 +16,14 @@ const Analysis = () => {
   const [loading, setLoading] = useState(false);
   const [pdfFile, setPdfFile] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
   const [textInput, setTextInput] = useState("");
   const [message, setMessage] = useState("");
   const [analysisResult, setAnalysisResult] = useState(null);
   const [sources, setSources] = useState([]);
   const [aiDetectionResult, setAiDetectionResult] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
   const navigate = useNavigate();
 
   const handlePdfUpload = (e) => {
@@ -67,6 +69,33 @@ const Analysis = () => {
     }
   };
 
+  const handleVideoUpload = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        setMessage("Video file size exceeds 10MB limit");
+        return;
+      }
+      
+      const validVideoTypes = ['video/mp4', 'video/webm', 'video/ogg'];
+      if (!validVideoTypes.includes(selectedFile.type)) {
+        setMessage("Please upload a valid video file (MP4, WebM, Ogg)");
+        return;
+      }
+      
+      setVideoFile(selectedFile);
+      
+      // Create video preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setVideoPreview(reader.result);
+      };
+      reader.readAsDataURL(selectedFile);
+      
+      setMessage("");
+    }
+  };
+
   const handleTextChange = (e) => {
     setTextInput(e.target.value);
     setMessage("");
@@ -88,8 +117,8 @@ const Analysis = () => {
   };
 
   const handleSubmit = async () => {
-    if (!pdfFile && !textInput.trim() && !imageFile) {
-      setMessage("Please upload a file (PDF or image) or enter text for analysis.");
+    if (!pdfFile && !textInput.trim() && !imageFile && !videoFile) {
+      setMessage("Please upload a file (PDF, image, or video) or enter text for analysis.");
       return;
     }
 
@@ -210,6 +239,44 @@ const Analysis = () => {
           console.error("Image analysis error:", error);
         }
       }
+
+      // Handle video analysis
+      if (videoFile) {
+        try {
+          const formData = new FormData();
+          formData.append("video", videoFile);
+          
+          const aiDetectionResponse = await axios.post(
+            `${BACKEND_URL}/detect-ai`,
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+              maxContentLength: MAX_FILE_SIZE,
+              maxBodyLength: MAX_FILE_SIZE,
+            }
+          );
+          
+          if (aiDetectionResponse.data && aiDetectionResponse.data.video) {
+            setAiDetectionResult(prevResult => ({
+              ...prevResult,
+              video: aiDetectionResponse.data.video
+            }));
+            
+            // Save user action to Firestore
+            await saveUserAction(
+              "Video upload", 
+              JSON.stringify(aiDetectionResponse.data.video),
+              "aiVideoDetection"
+            );
+          }
+        } catch (error) {
+          const errorMessage = error.response?.data?.detail || error.message;
+          setMessage(`Error during video analysis: ${errorMessage}`);
+          console.error("Video analysis error:", error);
+        }
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.detail || error.message;
       setMessage(`Error during analysis: ${errorMessage}`);
@@ -222,7 +289,9 @@ const Analysis = () => {
   const clearForm = () => {
     setPdfFile(null);
     setImageFile(null);
+    setVideoFile(null);
     setImagePreview(null);
+    setVideoPreview(null);
     setTextInput("");
     setMessage("");
     setAnalysisResult(null);
@@ -237,116 +306,166 @@ const Analysis = () => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white flex flex-col">
+    <div className="flex flex-col min-h-screen bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 text-white">
       <Header />
-      <div className="flex-grow max-w-4xl mx-auto px-6 py-12">
+      <div className="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <ContentCard>
-          <h2 className="text-2xl font-bold mb-4">Content Analysis Tool</h2>
+          <h2 className="text-2xl font-bold mb-6 text-center">Content Analysis Tool</h2>
           
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-2">Text Analysis</h3>
-            <textarea
-              className="w-full h-32 p-3 bg-gray-800 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter text here for analysis..."
-              value={textInput}
-              onChange={handleTextChange}
-            />
-
-            <div className="mt-2">
-              <label className="block text-sm font-medium mb-1">Or upload a PDF for text extraction:</label>
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handlePdfUpload}
-                className="bg-gray-700 text-white p-2 rounded-md cursor-pointer w-full"
+          <div className="space-y-8">
+            {/* Text Analysis Section */}
+            <section className="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+              <h3 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Text Analysis</h3>
+              <textarea
+                className="w-full h-32 p-3 bg-gray-800 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                placeholder="Enter text here for analysis..."
+                value={textInput}
+                onChange={handleTextChange}
               />
-              <p className="text-sm text-gray-400 mt-1">Maximum file size: 10MB</p>
-            </div>
-          </div>
 
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-2">Image Analysis</h3>
-            <div className="mt-2">
-              <label className="block text-sm font-medium mb-1">Upload an image for AI detection:</label>
+              <div className="mt-3">
+                <label className="block text-sm font-medium mb-2">Or upload a PDF for text extraction:</label>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handlePdfUpload}
+                  className="block w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 bg-gray-700 rounded-md cursor-pointer"
+                />
+                <p className="text-xs text-gray-400 mt-1">Maximum file size: 10MB</p>
+              </div>
+            </section>
+
+            {/* Image Analysis Section */}
+            <section className="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+              <h3 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Image Analysis</h3>
+              <label className="block text-sm font-medium mb-2">Upload an image for AI detection:</label>
               <input
                 type="file"
                 accept="image/*"
                 onChange={handleImageUpload}
-                className="bg-gray-700 text-white p-2 rounded-md cursor-pointer w-full"
+                className="block w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 bg-gray-700 rounded-md cursor-pointer"
               />
-              <p className="text-sm text-gray-400 mt-1">Supported formats: JPEG, PNG, GIF, WEBP</p>
-            </div>
-            
-            {imagePreview && (
-              <div className="mt-4">
-                <p className="text-sm font-medium mb-1">Image preview:</p>
-                <img 
-                  src={imagePreview} 
-                  alt="Preview" 
-                  className="max-h-48 rounded-md border border-gray-600"
-                />
+              <p className="text-xs text-gray-400 mt-1">Supported formats: JPEG, PNG, GIF, WEBP</p>
+              
+              {imagePreview && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium mb-2">Image preview:</p>
+                  <div className="relative overflow-hidden rounded-md border border-gray-600">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="max-h-48 max-w-full object-contain mx-auto"
+                    />
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Video Analysis Section */}
+            <section className="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+              <h3 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Video Analysis</h3>
+              <label className="block text-sm font-medium mb-2">Upload a video for AI detection:</label>
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/ogg"
+                onChange={handleVideoUpload}
+                className="block w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 bg-gray-700 rounded-md cursor-pointer"
+              />
+              <p className="text-xs text-gray-400 mt-1">Supported formats: MP4, WebM, Ogg</p>
+              
+              {videoPreview && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium mb-2">Video preview:</p>
+                  <div className="relative rounded-md border border-gray-600 bg-black">
+                    <video 
+                      src={videoPreview} 
+                      controls
+                      className="max-h-48 max-w-full mx-auto"
+                    ></video>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Loading indicator and error messages */}
+            {loading && <div className="py-4"><ProgressIndicator /></div>}
+            {message && (
+              <div className="mt-4 p-3 bg-red-900 bg-opacity-50 text-red-200 rounded-md">
+                {message}
               </div>
             )}
-          </div>
 
-          {loading && <ProgressIndicator />}
-          {message && <p className="mt-4 text-red-400">{message}</p>}
-
-          {/* Fact-checking Results */}
-          {analysisResult && (
-            <div className="mt-4 p-4 bg-gray-800 rounded-md">
-              <h3 className="text-lg font-semibold">Fact-checking Results:</h3>
-              <p className="text-green-300">{analysisResult}</p>
-              {sources.length > 0 && (
-                <>
-                  <h4 className="mt-3 text-md font-semibold">Sources:</h4>
-                  <ul className="list-disc pl-5">
-                    {sources.map((source, index) => (
-                      <li key={index} className="text-blue-400">{source}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* AI Detection Results */}
-          {aiDetectionResult && (
-            <div className="mt-4 p-4 bg-gray-800 rounded-md">
-              <h3 className="text-lg font-semibold mb-2">AI Detection Results:</h3>
-              
-              {aiDetectionResult.text && (
-                <div className="mb-3">
-                  <h4 className="text-md font-medium">Text Analysis:</h4>
-                  <p className="text-yellow-300">{aiDetectionResult.text.result}</p>
-                  <p className="text-sm text-gray-400">Confidence: {aiDetectionResult.text.confidence}</p>
+            {/* Fact-checking Results */}
+            {analysisResult && (
+              <section className="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                <h3 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Fact-checking Results</h3>
+                <div className="prose prose-invert max-w-none">
+                  <p className="text-green-300">{analysisResult}</p>
                 </div>
-              )}
-              
-              {aiDetectionResult.image && (
-                <div>
-                  <h4 className="text-md font-medium">Image Analysis:</h4>
-                  <p className="text-yellow-300">{aiDetectionResult.image.result}</p>
-                  <p className="text-sm text-gray-400">Confidence: {aiDetectionResult.image.confidence}</p>
-                </div>
-              )}
-            </div>
-          )}
+                {sources.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-md font-semibold mb-2">Sources:</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {sources.map((source, index) => (
+                        <li key={index} className="text-blue-400 break-words">{source}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
 
-          <div className="flex justify-end gap-4 mt-6">
-            <button
-              onClick={clearForm}
-              className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200"
-            >
-              Clear
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {loading ? "Processing..." : "Analyze Content"}
-            </button>
+            {/* AI Detection Results */}
+            {aiDetectionResult && (
+              <section className="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                <h3 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">AI Detection Results</h3>
+                
+                <div className="space-y-4">
+                  {aiDetectionResult.text && (
+                    <div className="p-3 bg-gray-800 rounded-md">
+                      <h4 className="text-md font-medium mb-2 text-blue-300">Text Analysis</h4>
+                      <p className="text-yellow-300 text-lg">{aiDetectionResult.text.result}</p>
+                      <p className="text-sm text-gray-400 mt-1">Confidence: {aiDetectionResult.text.confidence}</p>
+                    </div>
+                  )}
+                  
+                  {aiDetectionResult.image && (
+                    <div className="p-3 bg-gray-800 rounded-md">
+                      <h4 className="text-md font-medium mb-2 text-blue-300">Image Analysis</h4>
+                      <p className="text-yellow-300 text-lg">{aiDetectionResult.image.result}</p>
+                      <p className="text-sm text-gray-400 mt-1">Confidence: {aiDetectionResult.image.confidence}</p>
+                    </div>
+                  )}
+
+                  {aiDetectionResult.video && (
+                    <div className="p-3 bg-gray-800 rounded-md">
+                      <h4 className="text-md font-medium mb-2 text-blue-300">Video Analysis</h4>
+                      <p className="text-yellow-300 text-lg">{aiDetectionResult.video.result}</p>
+                      <p className="text-sm text-gray-400 mt-1">Confidence: {aiDetectionResult.video.confidence}</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap justify-end gap-4 mt-6">
+              <button
+                onClick={clearForm}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className={`bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 ${
+                  loading ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                {loading ? "Processing..." : "Analyze Content"}
+              </button>
+            </div>
           </div>
         </ContentCard>
       </div>

@@ -16,6 +16,8 @@ from transformers import (
 )
 from PIL import Image
 import base64
+import cv2
+import tempfile
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -121,8 +123,92 @@ class AIDetector:
             logger.error(f"❌ Error in image detection: {e}")
             return "Error processing image", 0.0, []
 
-    def analyze_content(self, image_data=None, text=None):
-        """Analyze both image and text with improved accuracy and XAI outputs."""
+    def detect_video(self, video_data, frame_interval=5):
+        """Extract frames from a video and analyze them for AI-generated content."""
+        try:
+            # Create a temporary file to store the video
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_video:
+                temp_video.write(video_data)
+                video_path = temp_video.name
+                
+            logger.info(f"📹 Processing video: {video_path}")
+            cap = cv2.VideoCapture(video_path)
+            
+            if not cap.isOpened():
+                logger.error("❌ Error: Could not open video!")
+                os.remove(video_path)
+                return "Error: Could not open video", 0.0, []
+            
+            frame_count = 0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            detected_frames = 0
+            ai_frames = 0
+            probabilities_list = []
+            
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break  # End of video
+                
+                # Process every 'frame_interval' frame
+                if frame_count % frame_interval == 0:
+                    # Create temporary file for the frame
+                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_frame:
+                        image_path = temp_frame.name
+                    
+                    cv2.imwrite(image_path, frame)  # Save frame as image
+                    
+                    # Run AI detection on the extracted frame
+                    label, confidence, probs = self.detect_image(image_path)
+                    detected_frames += 1
+                    
+                    if "AI-Generated" in label:
+                        ai_frames += 1
+                    
+                    probabilities_list.append(probs)
+                    
+                    # Remove temporary frame file
+                    os.remove(image_path)
+                
+                frame_count += 1
+            
+            cap.release()
+            
+            # Remove the temporary video file
+            os.remove(video_path)
+            
+            # Final classification for the video
+            if detected_frames == 0:
+                logger.error("❌ No frames were analyzed! Try reducing frame_interval.")
+                return "Error: No frames analyzed", 0.0, []
+            
+            ai_ratio = ai_frames / detected_frames
+            final_label = "🚩 AI-Generated" if ai_ratio > 0.5 else "✅ Real"
+            final_confidence = ai_ratio * 100
+            
+            # Average the probabilities
+            avg_probabilities = [0, 0]
+            for p in probabilities_list:
+                avg_probabilities[0] += p[0][0]
+                avg_probabilities[1] += p[0][1]
+            
+            if probabilities_list:
+                avg_probabilities[0] /= len(probabilities_list)
+                avg_probabilities[1] /= len(probabilities_list)
+            
+            return final_label, final_confidence, [avg_probabilities]
+            
+        except Exception as e:
+            logger.error(f"❌ Error in video detection: {e}")
+            # Clean up any temporary files if they exist
+            if 'video_path' in locals() and os.path.exists(video_path):
+                os.remove(video_path)
+            if 'image_path' in locals() and os.path.exists(image_path):
+                os.remove(image_path)
+            return "Error processing video", 0.0, []
+
+    def analyze_content(self, image_data=None, text=None, video_data=None):
+        """Analyze image, text, and video content with improved accuracy and XAI outputs."""
         results = {}
 
         if image_data:
@@ -141,6 +227,15 @@ class AIDetector:
                 "result": text_result,
                 "confidence": f"{text_conf:.2f}%",
                 "probabilities": text_probs
+            }
+            
+        if video_data:
+            logger.info("🔍 Analyzing video...")
+            video_result, video_conf, video_probs = self.detect_video(video_data)
+            results["video"] = {
+                "result": video_result,
+                "confidence": f"{video_conf:.2f}%",
+                "probabilities": video_probs
             }
 
         return results
@@ -336,26 +431,33 @@ async def analyze_text(data: InputData):
         raise HTTPException(status_code=400, detail="Empty content provided")
     return fact_check_agent(data.content)
 
-# New endpoint for AI detection
+# Modified endpoint for AI detection including video
 @app.post("/detect-ai")
 async def detect_ai(
     text: str = Form(None),
-    image: UploadFile = File(None)
+    image: UploadFile = File(None),
+    video: UploadFile = File(None)
 ):
     try:
         image_data = None
+        video_data = None
+        
         if image:
             image_data = await image.read()
         
-        if not text and not image_data:
+        if video:
+            video_data = await video.read()
+        
+        if not text and not image_data and not video_data:
             raise HTTPException(
                 status_code=400,
-                detail="At least one of text or image must be provided"
+                detail="At least one of text, image, or video must be provided"
             )
         
         results = ai_detector.analyze_content(
             image_data=image_data,
-            text=text
+            text=text,
+            video_data=video_data
         )
         
         return results
