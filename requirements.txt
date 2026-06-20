@@ -8,4 +8,4 @@ torch==2.6.0+cu126
 transformers==4.48.3
 Pillow==11.1.0
 opencv-python==4.11.0.86
-python-multipart==0.0.20
+python-multipart==0.0.30
